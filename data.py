@@ -38,7 +38,7 @@ class Stock_Data:
     Volume_Turover_Ratio = Volume_Turover_Ratio.abs()
     stock_df['Volume_Turover_Ratio'] = Volume_Turover_Ratio
     print(stock_df)
-    export_csv = stock_df.to_csv (r'C:\Users\Saran\Desktop\export_dataframe.csv', index = None, header=True) 
+    #export_csv = stock_df.to_csv (r'C:\Users\Saran\Desktop\export_dataframe.csv', index = None, header=True) 
     
     plt.figure(figsize = (16,9))
     plt.plot(range(stock_df.shape[0]),(stock_df['low']+stock_df['high'])/2.0)
