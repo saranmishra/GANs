@@ -1,0 +1,200 @@
+
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Dec  5 22:01:54 2019
+@author: Saran
+"""
+"""
+Our goal is to create a LSTM on a single stock 
+Note: the paper does not mention the layers of the LSTM
+We are going to build this LSTM for 1 factor
+7 factors will be considered in the GAN where this LSTM will be utilized
+
+"""
+from data import Stock_Data
+import numpy as  np 
+import pandas as pd 
+import matplotlib.pyplot as plt 
+from sklearn.preprocessing import MinMaxScaler
+import datetime as dt
+import matplotlib.pyplot as plt
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Activation
+from tensorflow.keras.layers import LSTM
+from tensorflow.keras.layers import Dropout
+from tensorflow.python.keras import backend
+
+
+
+
+
+
+#Identify training data set
+training_set = Stock_Data.stock_df.iloc[0:2517:,1:6].values
+training_set = np.array(training_set)
+
+# Feature Scaling
+sc = MinMaxScaler(feature_range = (0, 1))
+training_set_scaled = sc.fit_transform(training_set)
+
+
+
+# Creating a data structure with 5 timesteps and 1 output
+X_train = []
+y_train = []
+for i in range(5, 2517):
+    X_train.append(training_set_scaled[i-5:i, 0])
+    y_train.append(training_set_scaled[i, 0])
+X_train, y_train = np.array(X_train), np.array(y_train)
+
+# Reshaping
+X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
+
+
+
+# Part 2 - Building the RNN
+
+
+# Initialising the RNN
+regressor = Sequential()
+
+# Adding the first LSTM layer and some Dropout regularisation
+regressor.add(LSTM(units = 7, return_sequences = False, input_shape = (X_train.shape[1], 1)))
+regressor.add(Dropout(0.2))
+
+
+# Adding the output layer
+regressor.add(Dense(units = 1))
+regressor.add(Activation('relu'))
+
+
+# Compiling the RNN
+regressor.compile(optimizer = 'adam', loss = 'mean_squared_error')
+
+# Fitting the RNN to the Training set
+regressor.fit(X_train, y_train, epochs = 50, batch_size = 32)
+regressor.summary()
+
+
+
+############################################################
+
+#lookback= 60
+#
+#test_size=int(.5 * len(Stock_Data.stock_df.iloc[2517:,1:7].values))
+#X=[]
+#y=[]
+#for i in range(len(Stock_Data.stock_df)-lookback-1):
+#    t=[]
+#    for j in range(0,lookback):
+#        
+#        t.append(training_set[[(i+j)], :])
+#    X.append(t)
+#    y.append(training_set[i+ lookback,1])
+#
+#X, y= np.array(X), np.array(y)
+#X_test = X[:test_size+lookback]
+#X = X.reshape(X.shape[0],lookback, 6)
+#X_test = X_test.reshape(X_test.shape[0],lookback, 6)
+#print(X.shape)
+#print(X_test.shape)
+#
+#predicted_value= regressor.predict(X_test)
+
+
+############################################################
+
+
+#Making the predictions and visualising the results
+
+testing_set = Stock_Data.stock_df.iloc[2517:5033:, 1:6].values
+
+
+# Getting the predicted stock price of 2017
+dataset_total = np.concatenate((training_set[:,], testing_set[:,]), axis = 0)
+
+dataset_total =  sc.fit_transform(dataset_total)
+
+
+inputs = dataset_total[len(dataset_total) - len(testing_set) - 5:]
+inputs = inputs.reshape(-1,1)
+#inputs = sc.transform(inputs)
+X_test = []
+
+for i in range(5, 2517):
+    X_test.append(inputs[i-5:i, 0])
+    
+X_test = np.array(X_test)
+X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+
+
+predicted_stock_price = regressor.predict(X_test)
+#predicted_stock_price = predicted_stock_price.transpose(2,0,1).reshape(-1,predicted_stock_price.shape[1])
+
+# create empty table with 12 fields
+testPredict_dataset_like = np.zeros(shape=(len(predicted_stock_price), 5))
+# put the predicted values in the right field
+testPredict_dataset_like[:,0] = predicted_stock_price[:,0]
+
+# inverse transform and then select the right field
+
+testPredict = sc.inverse_transform(testPredict_dataset_like)[:,0]
+
+testPredict = testPredict.reshape(-1, 1)
+
+#predicted_stock_price = sc.inverse_transform(testPredict)
+
+
+#X_test = X_test.transpose(2,0,1).reshape(-1,X_test.shape[1])
+
+#predicted_stock_price = sc.inverse_transform(predicted_stock_price)
+    
+# Visualizing the results
+plt.plot(testPredict, color = 'blue', label = 'Predicted Close Price')
+plt.plot(training_set[:,4:5], color = 'orange', label = 'Real Close Price')
+plt.title('Close Price Prediction')
+plt.xlabel('Time')
+plt.ylabel('MSFT Close Price')
+plt.legend()
+plt.show()
+###################################################################
+#Analysis
+
+#from sklearn.metrics import mean_absolute_error, mean_squared_error
+#from math import sqrt
+#
+#
+#class MAE:
+#    
+#    expected_val = (testing_set[:,4])
+#    
+#    expected_val = expected_val[0:2512,]
+#    
+#    
+#    expected = expected_val
+#    
+#    predictions = testPredict
+#    
+#    mae = mean_absolute_error(expected, predictions)
+#    print('MAE: %f' % mae)
+#
+#
+#class MSE:
+#   
+#    expected_MSE = testing_set[:,4]
+#    expected_val = expected_val[0:2512,]
+#    
+#    
+#    expected = expected_val
+#    
+#    predictions = testPredict
+#    
+#    predictions_MSE = testPredict
+#    mse = mean_squared_error(expected, predictions)
+#    print('MSE: %f' % mse)
+# 
+#class RMSE:
+#   rms = sqrt(MSE.mse)
+#   print(rms)
+
+
