@@ -1,0 +1,247 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Dec 12 20:02:52 2019
+
+@author: Saran
+"""
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+#%matplotlib inline
+from tensorflow.keras.models import Model,Sequential
+from tensorflow.keras.datasets import mnist
+from tqdm import tqdm
+#from tensorflow.keras.layers.advanced_activations import LeakyReLU
+from tensorflow.keras.optimizers import Adam
+#import LSTM_Keras
+from data import Stock_Data
+import tensorflow as tf
+from tensorflow.keras.layers import Dense, LSTM, Activation, LeakyReLU, Dropout, Input
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.python.framework.ops import disable_eager_execution
+
+
+disable_eager_execution()
+
+
+
+
+
+###################################################
+#Data (loaded, prepped, reshaped)
+###################################################
+
+
+def load_data():
+        
+    df = Stock_Data.stock_df.iloc[0:5034:,0:8].values
+    df = np.array(df)
+    
+    X_train, X_test, y_train, y_test = train_test_split(df[:,1:7], df[:,4:5], test_size=0.1, random_state=42)
+    
+    sc= MinMaxScaler(feature_range=(0,1))
+    
+    X_train[:,0:6] = sc.fit_transform(X_train[:,:])
+    
+    #y_test = (y_test.astype(np.float32))
+
+    
+    #(x_train, y_train), (x_test, y_test) = mnist.load_data()
+    X_train = (X_train.astype(np.float32))
+    
+    
+    #x_train = (x_train.astype(np.float32) - 127.5)/127.5
+    
+     #convert shape of x_train from (60000, 28, 28) to (60000, 784) 
+     #784 columns per row
+     
+    #x_train = x_train.reshape(60000, 784)
+    return (X_train, y_train, X_test, y_test)
+(X_train, y_train, X_test, y_test)=load_data()
+
+print(X_train.shape)
+
+
+
+###################################################
+#Optimizer
+###################################################
+
+
+def adam_optimizer():
+    return Adam(lr=0.0002, beta_1=0.5)
+
+
+###################################################
+#Generator (Tested as a MLP, then utilized as LSTM)
+###################################################
+def create_generator():
+    generator=Sequential()
+    generator.add(Dense(units=72,input_dim=6))
+    generator.add(LeakyReLU(0.2))
+    
+    generator.add(Dense(units=100))
+    generator.add(LeakyReLU(0.2))
+    
+    generator.add(Dense(units=10))
+    generator.add(LeakyReLU(0.2))
+    
+    generator.add(Dense(units=6, activation='relu'))
+    
+    generator.compile(loss='mean_squared_error', optimizer=adam_optimizer())
+    return generator
+
+g=create_generator()
+generator= create_generator()
+
+g.summary()
+    
+
+#g.summary()
+
+
+#Discriminator
+###################################################
+
+
+def create_discriminator():
+    discriminator=Sequential()
+    discriminator.add(Dense(units=72,input_dim=6))
+    discriminator.add(Activation('relu'))
+    discriminator.add(Dropout(0.3))
+       
+    
+    discriminator.add(Dense(units=100))
+    discriminator.add(Activation('relu'))
+    discriminator.add(Dropout(0.3))
+       
+    discriminator.add(Dense(units=10))
+    discriminator.add(Activation('relu'))
+    
+    discriminator.add(Dense(units=1, activation='sigmoid'))
+    
+    discriminator.compile(loss='mean_squared_error', optimizer=adam_optimizer())
+    return discriminator
+
+d =create_discriminator()
+d.summary()
+
+
+###################################################
+#GAN
+###################################################
+
+
+def create_gan(discriminator, generator):
+    
+    discriminator.trainable=False
+    
+    gan_input = Input(shape=(6,))
+    
+    x = generator(gan_input)
+    
+    gan_output= discriminator(x)
+    
+    gan= Model(inputs=gan_input, outputs=gan_output)
+    
+    gan.compile(loss='mean_squared_error', optimizer='adam')
+
+    return gan
+
+gan = create_gan(d,g)
+gan.summary()
+
+
+###################################################
+#GAN training
+###################################################
+def training(epochs=1, batch_size=100):
+        #Loading the data
+        
+    #Loading the data
+    (X_train, y_train, X_test, y_test) = load_data()
+    #batch_count = X_train.shape[0] / batch_size
+    
+    # Felt cute, may Delete later
+#    epochs = 1
+#    batch_size = 100
+    
+    # Creating GAN
+    generator= create_generator()
+    discriminator= create_discriminator()
+    gan = create_gan(discriminator, generator)
+    
+     #Adversarial ground truths
+    valid = np.ones((batch_size, 1))
+    
+    fake = np.zeros((batch_size, 1))
+    
+    for e in range(1,epochs+1 ):
+        print("Epoch %d" %e)
+        for _ in tqdm(range(batch_size)):
+        #generate  random noise as an input  to  initialize the  generator
+            #noise= X_test[np.random.randint(low=0,high=X_test.shape[1],size=128)]
+            
+            #noise= x_train[np.random.randint(low=0,high=x_train.shape[0],size=128)]
+
+            noise= X_train[np.random.randint(low=0,high=X_train.shape[1],size=100)]
+
+            # Generate fake outputs from noised input
+            generated_closingprices = generator.predict(noise)
+            generated_closingprices.shape
+            
+            
+            # Get a random set of real data
+            closingprice_batch = X_test[np.random.randint(low=0,high=X_test.shape[0],size=100)]
+            closingprice_batch = (closingprice_batch.astype(np.float32))
+            
+            closingprice_batch.shape
+            
+            #closingprice_batch = (closingprice_batch.astype(np.float32))
+            
+            #Construct different batches of  real and fake data 
+            X= np.concatenate([closingprice_batch, generated_closingprices])
+            
+            # Labels for generated and real data
+            y_dis=np.zeros(2*100)
+            y_dis[:batch_size]=0.9
+            
+            #Pre train discriminator on  fake and real data  before starting the gan. 
+            discriminator.trainable=True
+            discriminator.train_on_batch(X, y_dis)
+            
+            
+            #Tricking the noised input of the Generator as real data
+            #noise= np.random.normal(0,1, [batch_size, 100])
+            y_gen = np.ones(batch_size)
+            
+            # During the training of gan, 
+            # the weights of discriminator should be fixed. 
+            #We can enforce that by setting the trainable flag
+                
+            discriminator.trainable=False
+            
+            #Calculate loss 
+            
+            d_loss_real = discriminator.train_on_batch(closingprice_batch, valid)
+            d_loss_fake = discriminator.train_on_batch(generated_closingprices, fake)
+            d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+
+            g_loss = gan.train_on_batch(noise, valid)
+            
+            #Train gan on Noise and noised input 
+
+            gan.train_on_batch(noise, y_gen)
+            
+            print ("%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (epochs, d_loss, 100*d_loss, g_loss))
+
+
+            
+
+training(300,100)
+    
+
+      
+
