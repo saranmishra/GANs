@@ -7,8 +7,8 @@ Created on Thu Dec  5 22:01:54 2019
 """
 Our goal is to create a LSTM on a single stock 
 Note: the paper does not mention the layers of the LSTM
-We are going to build this LSTM for 1 factor in accordance with Zhang paper
-7 factors will be considered in the GAN where this LSTM will be utilized
+We are going to build this LSTM for 7 factors in accordance with Zhang paper
+7 factors will also be considered in the GAN where this LSTM will be utilized
 
 """
 from data import Stock_Data
